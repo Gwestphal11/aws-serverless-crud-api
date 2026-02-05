@@ -1,0 +1,15 @@
+exports.handler = async function(event) {
+  console.log("Event received:", JSON.stringify(event, null, 2));
+
+  return {
+    statusCode: 200,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: "API is working 🎉",
+      timestamp: new Date().toISOString(),
+      requestId: event?.requestContext?.requestId
+    })
+  };
+};
+
+
