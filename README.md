@@ -1,6 +1,8 @@
-# Welcome to your CDK TypeScript project
+# aws-serverless-crud-api
 
-This is a blank project for CDK development with TypeScript.
+Serverless CRUD API using AWS Lambda, API Gateway, and DynamoDB
+
+This is a CDK TypeScript project.
 
 The `cdk.json` file tells the CDK Toolkit how to execute your app.
 
