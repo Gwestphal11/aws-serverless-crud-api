@@ -1,6 +1,6 @@
 #!/bin/bash
 
-API_URL="https://v2jzt9n4q7.execute-api.us-east-1.amazonaws.com/prod"
+API_URL="https://z9wm2e2c80.execute-api.us-east-1.amazonaws.com/prod"
 
 echo "=== CRUD Operations Test ==="
 echo ""

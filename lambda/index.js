@@ -1,116 +1,124 @@
-const AWS = require('aws-sdk');
-const docClient = new AWS.DynamoDB.DocumentClient();
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
+const { randomUUID } = require('crypto');
+
+const client = new DynamoDBClient({});
+const docClient = DynamoDBDocumentClient.from(client);
+
+/**
+ * Serverless CRUD Lambda Handler
+ * - POST   /items       → create item
+ * - GET    /items       → list all items
+ * - GET    /items/{id}  → read single item
+ * - PUT    /items/{id}  → update item
+ * - DELETE /items/{id}  → delete item
+ */
+
+// --- Headers for CORS + JSON ---
+const headers = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+};
+
+// --- Helper to standardize responses ---
+const response = (statusCode, body) => ({
+  statusCode,
+  headers,
+  body: JSON.stringify(body),
+});
 
 exports.handler = async (event) => {
-    console.log('Event:', JSON.stringify(event));
+    console.log('Event received:', JSON.stringify(event));
 
     const tableName = process.env.TABLE_NAME;
     const method = event.httpMethod;
-    const path = event.path; // full path like /items or /items/123
+    const path = event.resource; // safer than event.path
     const pathParams = event.pathParameters || {};
     let body = {};
 
+    // --- Handle OPTIONS preflight ---
+    if (method === 'OPTIONS') {
+        return response(200, {});
+    }
+
+    // --- Parse JSON body ---
     if (event.body) {
         try {
             body = JSON.parse(event.body);
         } catch (err) {
-            return {
-                statusCode: 400,
-                body: JSON.stringify({ message: 'Invalid JSON body' }),
-            };
+            return response(400, { message: 'Invalid JSON body' });
         }
     }
 
     try {
+        // --- CREATE ---
         if (path === '/items' && method === 'POST') {
-            // CREATE
-            const id = body.id || new Date().toISOString(); // use provided id or timestamp
+            const id = body.id || randomUUID();
             const item = { id, ...body };
 
-            await docClient.put({
-                TableName: tableName,
-                Item: item,
-            }).promise();
-
-            return {
-                statusCode: 201,
-                body: JSON.stringify(item),
-            };
+            await docClient.send(new PutCommand({ TableName: tableName, Item: item }));
+            return response(201, item);
         }
 
-        if (path.startsWith('/items/') && method === 'GET') {
-            // READ single item
+        // --- READ single item ---
+        if (path === '/items/{id}' && method === 'GET') {
             const id = pathParams.id;
-            const result = await docClient.get({
-                TableName: tableName,
-                Key: { id },
-            }).promise();
+            const result = await docClient.send(new GetCommand({ TableName: tableName, Key: { id } }));
 
-            if (!result.Item) {
-                return { statusCode: 404, body: JSON.stringify({ message: 'Item not found' }) };
-            }
-
-            return { statusCode: 200, body: JSON.stringify(result.Item) };
+            if (!result.Item) return response(404, { message: 'Item not found' });
+            return response(200, result.Item);
         }
 
-        if (path.startsWith('/items/') && method === 'PUT') {
-            // UPDATE
+        // --- UPDATE ---
+        if (path === '/items/{id}' && method === 'PUT') {
             const id = pathParams.id;
             const updateExpression = [];
-            const expressionAttributeValues = {};
+            const expressionValues = {};
 
             for (const key of Object.keys(body)) {
-                if (key !== 'id') { // never update the ID
+                if (key !== 'id') {
                     updateExpression.push(`${key} = :${key}`);
-                    expressionAttributeValues[`:${key}`] = body[key];
+                    expressionValues[`:${key}`] = body[key];
                 }
             }
 
-            if (updateExpression.length === 0) {
-                return { statusCode: 400, body: JSON.stringify({ message: 'Nothing to update' }) };
-            }
+            if (updateExpression.length === 0) return response(400, { message: 'Nothing to update' });
 
-            const result = await docClient.update({
+            const result = await docClient.send(new UpdateCommand({
                 TableName: tableName,
                 Key: { id },
                 UpdateExpression: `SET ${updateExpression.join(', ')}`,
-                ExpressionAttributeValues: expressionAttributeValues,
+                ExpressionAttributeValues: expressionValues,
                 ReturnValues: 'ALL_NEW',
-            }).promise();
+            }));
 
-            return { statusCode: 200, body: JSON.stringify(result.Attributes) };
+            return response(200, result.Attributes);
         }
 
-        if (path.startsWith('/items/') && method === 'DELETE') {
-    const id = pathParams.id;
-    await docClient.delete({
-        TableName: tableName,
-        Key: { id },
-    }).promise();
+        // --- DELETE ---
+        if (path === '/items/{id}' && method === 'DELETE') {
+            const id = pathParams.id;
+            await docClient.send(new DeleteCommand({ TableName: tableName, Key: { id } }));
+            return response(200, { id, message: 'Item deleted successfully' });
+        }
 
-    return {
-        statusCode: 200,
-        body: JSON.stringify({
-            id,
-            message: 'Item deleted',
-        }),
-    };
-}
-
-
+        // --- LIST all items ---
         if (path === '/items' && method === 'GET') {
-            // LIST all items
-            const result = await docClient.scan({ TableName: tableName }).promise();
-            return { statusCode: 200, body: JSON.stringify(result.Items) };
+            const result = await docClient.send(new ScanCommand({ TableName: tableName, Limit: 25 }));
+            return response(200, result.Items);
         }
 
-        // Default: method/path not supported
-        return { statusCode: 404, body: JSON.stringify({ message: 'Not Found' }) };
+        // --- Unsupported route ---
+        return response(404, { message: 'Not Found' });
+
     } catch (err) {
-        console.error('Error:', err);
-        return { statusCode: 500, body: JSON.stringify({ message: err.message }) };
+        console.error('Internal Error:', err);
+        return response(500, { message: err.message });
     }
 };
+
 
 
 

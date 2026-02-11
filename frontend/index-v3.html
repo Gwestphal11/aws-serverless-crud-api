@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Serverless CRUD Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    input, button {
+      padding: 10px;
+      font-size: 16px;
+    }
+    #itemInput {
+      width: 70%;
+    }
+    button {
+      cursor: pointer;
+    }
+    ul {
+      margin-top: 20px;
+      padding-left: 0;
+      list-style: none;
+    }
+    li {
+      padding: 8px;
+      border-bottom: 1px solid #ccc;
+      display: flex;
+      justify-content: space-between;
+    }
+    .deleteBtn {
+      background: red;
+      color: white;
+      border: none;
+      padding: 5px 8px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Serverless CRUD Demo</h1>
+
+  <div>
+    <input type="text" id="itemInput" placeholder="Enter item message" />
+    <button id="addItemBtn">Add Item</button>
+  </div>
+
+  <ul id="itemList"></ul>
+
+  <script>
+    
+    const API_URL = "https://z9wm2e2c80.execute-api.us-east-1.amazonaws.com/prod";
+
+    // Load all items from API
+    async function loadItems() {
+      try {
+        const res = await fetch(`${API_URL}/items`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const items = await res.json();
+
+        const list = document.getElementById("itemList");
+        list.innerHTML = "";
+
+        items.forEach(item => {
+          const li = document.createElement("li");
+          li.textContent = `${item.id}: ${item.message}`;
+
+          const deleteBtn = document.createElement("button");
+          deleteBtn.textContent = "Delete";
+          deleteBtn.className = "deleteBtn";
+          deleteBtn.onclick = () => deleteItem(item.id);
+
+          li.appendChild(deleteBtn);
+          list.appendChild(li);
+        });
+      } catch (err) {
+        console.error("Error loading items:", err);
+        alert("Failed to load items. Check console for details.");
+      }
+    }
+
+    // Add a new item
+    async function addItem() {
+      const input = document.getElementById("itemInput");
+      const message = input.value.trim();
+      if (!message) return;
+
+      try {
+        const res = await fetch(`${API_URL}/items`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message })
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        input.value = "";
+        loadItems();
+      } catch (err) {
+        console.error("Error adding item:", err);
+        alert("Failed to add item. Check console for details.");
+      }
+    }
+
+    // Delete an item
+    async function deleteItem(id) {
+      try {
+        const res = await fetch(`${API_URL}/items/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        loadItems();
+      } catch (err) {
+        console.error("Error deleting item:", err);
+        alert("Failed to delete item. Check console for details.");
+      }
+    }
+
+    document.getElementById("addItemBtn").addEventListener("click", addItem);
+
+    // Load items on page load
+    loadItems();
+  </script>
+
+</body>
+</html>
+
+
